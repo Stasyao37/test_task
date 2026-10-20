@@ -2,13 +2,19 @@
 import json
 import sys
 
-from pp.fields import raw_fields
+from pp.combine import MRZ_FIELDS, NAME_FIELDS, combine
 from pp.validity import invalid_reason
+
+VERIFIED = {"agree", "mrz"}
+# поля, которые MRZ дублирует: принимаем только подтверждённые
+MRZ_COVERED = (*MRZ_FIELDS, *NAME_FIELDS)
 
 
 def decide(doc):
     """Вернуть (decision, fields) для одного документа."""
-    fields = raw_fields(doc)
+    fields, status = combine(doc)
+    if any(status[f] not in VERIFIED for f in MRZ_COVERED):
+        return "reject", None
     if any(v is None for v in fields.values()):
         return "reject", None
     if invalid_reason(fields["Birth_date"], fields["Issue_date"]):
