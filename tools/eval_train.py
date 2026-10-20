@@ -1,0 +1,56 @@
+"""Оценка на train с учётом действительности паспорта и разбивкой по source.
+
+python tools/eval_train.py [answers.jsonl] [labels.jsonl] [predictions.jsonl]
+"""
+import json
+import sys
+from collections import Counter, defaultdict
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from pp.fields import FIELDS, norm  # noqa: E402
+from pp.validity import invalid_reason  # noqa: E402
+
+
+def load(path):
+    with open(path, encoding="utf-8") as fh:
+        return {d["doc_id"]: d for d in map(json.loads, fh)}
+
+
+def main(ans_path="answers_train.jsonl", gt_path="data/train_labels.jsonl",
+         pred_path="data/train_predictions.jsonl"):
+    ans, gt, pred = load(ans_path), load(gt_path), load(pred_path)
+    missing = set(gt) - set(ans)
+    if missing:
+        sys.exit(f"нет ответа для {len(missing)} документов, например {sorted(missing)[:3]}")
+
+    by_src = defaultdict(Counter)
+    field_errors, invalid = Counter(), Counter()
+    for doc_id, g in gt.items():
+        gf = g["fields"]
+        src = pred[doc_id]["source"]
+        reason = invalid_reason(gf["Birth_date"], gf["Issue_date"])
+        by_src[src]["n"] += 1
+        by_src[src]["valid"] += reason is None
+        a = ans[doc_id]
+        if a.get("decision") != "accept":
+            continue
+        af = a.get("fields") or {}
+        wrong = [f for f in FIELDS if norm(af.get(f)) != norm(gf[f])]
+        field_errors.update(wrong)
+        if reason and not wrong:
+            invalid[reason] += 1
+        by_src[src]["good" if not wrong and not reason else "bad"] += 1
+
+    total = sum(by_src.values(), Counter())
+    print(f"{'source':<10} {'docs':>5} {'valid':>6} {'good':>6} {'bad':>5} {'accept%':>8}")
+    for src, c in sorted(by_src.items()) + [("ВСЕГО", total)]:
+        print(f"{src:<10} {c['n']:>5} {c['valid']:>6} {c['good']:>6} {c['bad']:>5} "
+              f"{c['good'] / c['n']:>8.1%}")
+    print("ошибки по полям:  " + (", ".join(f"{f}={c}" for f, c in field_errors.most_common()) or "-"))
+    print("приняты недействительные (поля верны): "
+          + (", ".join(f"{r}={c}" for r, c in invalid.items()) or "-"))
+
+
+if __name__ == "__main__":
+    main(*sys.argv[1:])
