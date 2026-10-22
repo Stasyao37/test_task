@@ -9,6 +9,7 @@
 from . import mrz as mrz_mod
 from . import normalize as N
 from .fields import FIELDS, raw_fields
+from .text import DOTTED_ABBR, TEXT_FIELDS, process_field
 
 NAME_FIELDS = ("Last_name_ru", "First_name_ru", "Middle_name_ru")
 
@@ -49,8 +50,8 @@ def _names(raw, m):
     return {"Last_name_ru": last, "First_name_ru": first, "Middle_name_ru": middle}, status
 
 
-def combine(doc):
-    """-> (fields, status): значения 10 полей и статус каждого."""
+def combine(doc, vocabs):
+    """-> (fields, status, texts): значения 10 полей, статус каждого и разбор свободного текста."""
     raw = raw_fields(doc)
     m = mrz_mod.parse(doc)
     fields, status = {}, {}
@@ -63,8 +64,10 @@ def combine(doc):
     fields.update(names)
     status.update(dict.fromkeys(NAME_FIELDS, names_status))
 
-    for f in ("Birth_place_ru", "Issue_organization_ru"):
-        fields[f] = N.text(raw[f])
+    texts = {}
+    for f in TEXT_FIELDS:
+        texts[f] = process_field(doc["viz"].get(f), vocabs[f], DOTTED_ABBR[f])
+        fields[f] = texts[f].text if texts[f] else None
         status[f] = "viz" if fields[f] is not None else "missing"
 
-    return {f: fields[f] for f in FIELDS}, {f: status[f] for f in FIELDS}
+    return {f: fields[f] for f in FIELDS}, {f: status[f] for f in FIELDS}, texts
