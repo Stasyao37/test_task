@@ -1,13 +1,8 @@
-"""Действительность паспорта РФ на дату проверки.
-
-Паспорт выдаётся с 14 лет и подлежит замене при достижении 20 и 45 лет.
-GRACE_DAYS — отсрочка после 20/45-летия, в течение которой паспорт ещё считается
-действительным (90 дней на подачу документов). Трактовку нужно проверить на train.
-"""
+"""Действительность паспорта: выдан с 14 лет, замена в 20 и 45."""
 import datetime as dt
 
 CHECK_DATE = dt.date(2026, 10, 1)
-GRACE_DAYS = 0
+GRACE_DAYS = 0   # 90-дневную отсрочку на замену не учитываем
 
 
 def parse_date(s):
@@ -18,7 +13,6 @@ def parse_date(s):
 
 
 def birthday(birth, age):
-    """День, когда исполняется age лет (для 29.02 в невисокосный год — 01.03)."""
     try:
         return birth.replace(year=birth.year + age)
     except ValueError:
@@ -26,7 +20,6 @@ def birthday(birth, age):
 
 
 def invalid_reason(birth_date, issue_date, on=CHECK_DATE, grace_days=GRACE_DAYS):
-    """None, если паспорт действителен; иначе строка с причиной."""
     b, i = parse_date(birth_date), parse_date(issue_date)
     if b is None or i is None:
         return "bad_date"

@@ -1,17 +1,8 @@
-"""Сведение visual-зоны и MRZ: итоговые значения полей и источник каждого.
+"""Сведение viz и MRZ по полям.
 
-Статусы поля:
-  agree   — viz совпало с MRZ, контрольные цифры MRZ сошлись (на train 100% верно)
-  mrz     — значение взято из MRZ с верными контрольными цифрами, viz не совпало/не читается
-  raw     — viz совпало с MRZ, хотя контрольная цифра не сошлась (два независимых прочтения;
-            на train 236/236 верно)
-  fixed   — ФИО: расхождения с MRZ решены посимвольно по уверенности (pp/names.py)
-  sex     — пол только из viz, но согласуется с окончанием отчества
-  sum     — значения viz, подставленные в MRZ, сходятся со всеми её контрольными цифрами
-  checked — номер / код / дата выдачи только из viz, но уверенно прочитаны и согласованы
-            между собой и со справочниками (pp/reference.py)
-  viz     — подтверждения нет, значение только из viz
-  missing — значения нет
+Статусы: agree / mrz — подтверждено MRZ с верной контрольной цифрой; raw — viz совпал с MRZ
+без неё; sum — viz сходится с контрольными цифрами MRZ; fixed — ФИО исправлены по MRZ;
+checked — согласовано со справочниками; sex — по отчеству; viz — без подтверждения.
 """
 from . import mrz as mrz_mod
 from . import names as names_mod
@@ -22,7 +13,7 @@ from .text import DOTTED_ABBR, TEXT_FIELDS, process_field
 
 NAME_FIELDS = ("Last_name_ru", "First_name_ru", "Middle_name_ru")
 
-# поле -> (нормализатор viz, атрибут Mrz, контрольные цифры, покрывающие поле)
+# поле -> (нормализатор, атрибут Mrz, контрольные цифры)
 MRZ_FIELDS = {
     "Licence_number": (N.licence_number, "licence_number", ("number", "optional")),
     "Birth_date": (N.birth_date, "birth_date", ("birth",)),
@@ -33,12 +24,11 @@ MRZ_FIELDS = {
 
 
 def _name(s):
-    # OCR путает Е/Ё, в разметке ФИО буквы Ё практически нет, в MRZ обе -> E
+    # в разметке ФИО Ё почти не встречается, OCR её путает с Е
     return None if s is None else N.text(s).replace("Ё", "Е")
 
 
-# Минимальная уверенность символов поля, при которой значение только из viz можно принять,
-# если оно согласовано с остальными (дату рождения проверить нечем — не принимаем).
+# дату рождения без MRZ проверить нечем
 CHECKED_MIN_CONF = {
     "Issue_organisation_code": 0.9,
     "Licence_number": 0.98,
@@ -77,7 +67,6 @@ def _names(doc, raw, m):
         status = "missing"
     elif m is not None and m.names is not None and \
             mrz_mod.translit_names(last, first, middle or "") == m.names:
-        # MRZ подтверждает и пустое отчество, если детектор его не нашёл
         middle = middle or ""
         status = "agree"
     else:
@@ -90,7 +79,6 @@ def _min_conf(field):
 
 
 def combine(doc, ref):
-    """-> (fields, status, texts): значения 10 полей, статус каждого и разбор свободного текста."""
     raw = raw_fields(doc)
     m = mrz_mod.parse(doc)
     fields, status = {}, {}

@@ -1,14 +1,12 @@
-"""Разбор машиночитаемой зоны (MRZ) внутреннего паспорта РФ.
+"""MRZ внутреннего паспорта РФ.
 
-Строка 1 (44 символа): PNRUS + ФАМИЛИЯ<<ИМЯ<ОТЧЕСТВО, транслитерация по таблице ниже,
-пробелы и дефисы -> '<', поле имён 39 символов (обрезается / добивается '<').
-
-Строка 2 (44 символа):
+Строка 1: PNRUS + ФАМИЛИЯ<<ИМЯ<ОТЧЕСТВО (39 символов), пробел и дефис -> '<'.
+Строка 2:
   [0:9]   серия (3 первые цифры) + номер     [9]  контрольная цифра
   [10:13] RUS
   [13:19] дата рождения ГГММДД               [19] контрольная цифра
   [20]    пол M/F
-  [21:28] срок действия + контрольная (не заполняется: '<<<<<<<')
+  [21:28] не заполняется
   [28]    4-я цифра серии
   [29:35] дата выдачи ГГММДД
   [35:41] код подразделения без дефиса
@@ -24,12 +22,11 @@ TRANSLIT = dict(zip("АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫ�
                     "ABVGDEEJZIQKLMNOPRSTUFHC34WXY9678<<"))
 NAMES_LEN = 39
 LINE_LEN = 44
-# Последний год, который в 2026 году может быть годом рождения 14-летнего / годом выдачи.
 CURRENT_YY = 26
 
 
 def check_digit(s):
-    """Контрольная цифра ICAO 9303: веса 7-3-1, '<' = 0, A..Z = 10..35."""
+    # ICAO 9303
     total = 0
     for i, ch in enumerate(s):
         if ch.isdigit():
@@ -43,7 +40,6 @@ def check_digit(s):
 
 
 def translit_names(last, first, middle):
-    """ФИО кириллицей -> поле имён строки 1 MRZ (39 символов); None, если есть чужие символы."""
     s = f"{last}<<{first}<{middle or ''}"
     out = []
     for ch in s:
@@ -57,7 +53,6 @@ def translit_names(last, first, middle):
 
 
 def _date(yymmdd, century_cut):
-    """ГГММДД -> ДД.ММ.ГГГГ; годы > century_cut относятся к XX веку."""
     if not yymmdd.isdigit():
         return None
     yy, mm, dd = int(yymmdd[:2]), yymmdd[2:4], yymmdd[4:6]
@@ -67,11 +62,7 @@ def _date(yymmdd, century_cut):
 
 
 def _checks(l2):
-    """Контрольные цифры по сегментам строки 2.
-
-    Буква на месте цифры тоже может дать верную контрольную сумму ('O' = 24 и т.п.),
-    поэтому сегмент засчитывается, только если он ещё и цифровой.
-    """
+    # буква на месте цифры тоже может сойтись по контрольной сумме
     return {
         "number": l2[0:10].isdigit() and check_digit(l2[0:9]) == l2[9],
         "birth": l2[13:20].isdigit() and check_digit(l2[13:19]) == l2[19],
@@ -81,10 +72,7 @@ def _checks(l2):
 
 
 def _repair_line2(text):
-    """Строка 2 длиной 43/45: вставить/удалить один символ так, чтобы сошлись все контрольные.
-
-    Возвращает исправленную строку, только если вариант единственный.
-    """
+    # 43/45 символов: единственная вставка/удаление, при которой сходятся все контрольные
     if len(text) == LINE_LEN + 1:
         cands = {text[:i] + text[i + 1:] for i in range(len(text))}
     elif len(text) == LINE_LEN - 1:
@@ -97,14 +85,14 @@ def _repair_line2(text):
 
 @dataclass
 class Mrz:
-    names: str | None = None            # поле имён строки 1 (39 символов) или None
+    names: str | None = None
     checks: dict = field(default_factory=dict)
-    licence_number: str | None = None   # "NN NN NNNNNN"
-    birth_date: str | None = None       # "ДД.ММ.ГГГГ"
+    licence_number: str | None = None
+    birth_date: str | None = None
     issue_date: str | None = None
-    code: str | None = None             # "NNN-NNN"
-    sex: str | None = None              # "МУЖ." / "ЖЕН."
-    repaired: bool = False              # строка 2 восстановлена по контрольным цифрам
+    code: str | None = None
+    sex: str | None = None
+    repaired: bool = False
     line2: str | None = None
 
     def ok(self, *names):
@@ -116,9 +104,7 @@ def _yymmdd(d):
 
 
 def confirms(m, number, birth, sex, issue, code):
-    """Значения viz, подставленные в строку 2 вместо прочитанных, дают верными ВСЕ
-    контрольные цифры (прочитанные из MRZ). Две независимые проверки на каждое поле —
-    случайное совпадение маловероятно (на train 105/105 верно)."""
+    """Значения viz, подставленные в строку 2, сходятся со всеми контрольными цифрами MRZ."""
     if m is None or m.line2 is None or not all((number, birth, sex, issue, code)):
         return False
     l2, s = m.line2, number.replace(" ", "")
@@ -129,7 +115,6 @@ def confirms(m, number, birth, sex, issue, code):
 
 
 def parse(doc):
-    """Разобрать MRZ документа; None, если MRZ нет."""
     m = doc.get("mrz")
     if not m or not m.get("lines"):
         return None

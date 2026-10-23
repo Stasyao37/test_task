@@ -1,12 +1,4 @@
-"""Свободный текст: «место рождения» и «кем выдан».
-
-MRZ эти поля не дублирует, поэтому:
-  * слова со «слабыми» символами (char_conf < LOW_CONF), которых нет в словаре,
-    исправляются на словарное слово на расстоянии 1, если правка приходится ровно
-    на слабые символы и кандидат единственный (СБЛАСТИ -> ОБЛАСТИ);
-  * считаются признаки надёжности: остаточная минимальная уверенность, доля
-    покрытия рамки поля строками (потерянная строка), слова вне словаря и т.п.
-"""
+"""Место рождения и кем выдан: словарное исправление слабых символов и признаки надёжности."""
 from collections import Counter
 from dataclasses import dataclass
 
@@ -18,8 +10,7 @@ from .fields import norm
 TEXT_FIELDS = ("Birth_place_ru", "Issue_organization_ru")
 LOW_CONF = 0.9
 
-# Сокращения, которые в разметке train пишутся только с точкой (0 исключений);
-# OCR точку часто теряет с высокой уверенностью.
+# в разметке всегда с точкой, OCR её теряет
 DOTTED_ABBR = {
     "Birth_place_ru": {"С", "П", "Д", "Г", "Х", "ГОР", "ДЕР", "ПОС", "СТАН", "РЕСП", "ОБЛ", "КР", "Р.П"},
     "Issue_organization_ru": {"Г", "ГОР", "П", "ПОС"},
@@ -27,8 +18,6 @@ DOTTED_ABBR = {
 
 
 class Vocab:
-    """Словарь слов и целых строк поля."""
-
     def __init__(self, texts):
         texts = [norm(t) for t in texts if t]
         self.words = Counter(w for t in texts for w in t.split())
@@ -39,13 +28,11 @@ class Vocab:
         return word in self.words
 
     def near(self, word):
-        """Словарные слова на расстоянии Левенштейна 1."""
         return [m for m, _, _ in process.extract(word, self._list, scorer=Levenshtein.distance,
                                                  score_cutoff=1, limit=20)]
 
 
 def build_vocabs(label_fields, subdivision_names=()):
-    """label_fields — список словарей полей из разметки."""
     return {
         "Birth_place_ru": Vocab(f["Birth_place_ru"] for f in label_fields),
         "Issue_organization_ru": Vocab([f["Issue_organization_ru"] for f in label_fields]
@@ -54,7 +41,6 @@ def build_vocabs(label_fields, subdivision_names=()):
 
 
 def _words(field):
-    """Слова поля с уверенностями их символов (строки склеиваются через пробел)."""
     out = []
     for line in field["lines"]:
         pos = 0
@@ -66,19 +52,16 @@ def _words(field):
 
 
 def _fix(word, conf, vocab):
-    """Словарная замена слова или None."""
     low = {i for i, c in enumerate(conf) if c < LOW_CONF}
     good = []
     for cand in vocab.near(word):
         ops = Levenshtein.editops(word, cand)
-        # вставка «между» символами допустима рядом со слабым символом
         if all(o.src_pos in low or (o.tag == "insert" and o.src_pos - 1 in low) for o in ops):
             good.append(cand)
     return good[0] if len(good) == 1 else None
 
 
 def _coverage(field):
-    """Высота, занятая строками, относительно рамки поля; < ~0.8 — строка потеряна."""
     lines = field["lines"]
     top = min(ln["box"][1] for ln in lines)
     bottom = max(ln["box"][1] + ln["box"][3] for ln in lines)
@@ -88,13 +71,13 @@ def _coverage(field):
 @dataclass
 class TextResult:
     text: str
-    n_fixed: int        # исправлено слов
-    n_oov: int          # слов вне словаря после исправления
-    n_low: int          # слабых символов в неисправленных словах
-    min_conf: float     # минимальная уверенность по неисправленным словам
+    n_fixed: int
+    n_oov: int
+    n_low: int
+    min_conf: float     # по неисправленным словам
     coverage: float
     n_lines: int
-    known: bool         # строка целиком совпадает с известной
+    known: bool
 
 
 def process_field(field, vocab, abbr=()):

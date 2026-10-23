@@ -1,8 +1,7 @@
-"""Оценка на train с учётом действительности паспорта и разбивкой по source.
+"""Оценка на train с учётом действительности паспорта.
 
-python tools/eval_train.py              — кросс-валидация: словари свободного текста строятся
-                                          без оцениваемого фолда, ответы -> answers_train.jsonl
-python tools/eval_train.py answers.jsonl — оценить готовый файл ответов
+python tools/eval_train.py                 # кросс-валидация
+python tools/eval_train.py answers.jsonl   # готовый файл ответов
 """
 import json
 import sys
@@ -24,7 +23,7 @@ def load(path):
 
 
 def cross_val_answers(gt, pred, out_path):
-    """Ответы по фолдам: справочные данные из разметки остальных фолдов + справочник."""
+    # словари строятся без оцениваемого фолда
     subdivisions = load_subdivisions(postprocess.SUBDIVISIONS)
     ids = sorted(pred)
     ans = {}

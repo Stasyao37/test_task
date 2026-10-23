@@ -1,10 +1,4 @@
-"""Сверка ФИО visual-зоны с MRZ посимвольно.
-
-Транслитерация в MRZ — буква в букву (Е/Ё -> E, пробел/дефис -> '<'), поэтому
-расхождения viz и MRZ выравниваются по Левенштейну, и каждое решается в пользу
-уверенно прочитанной стороны: слабый символ (char_conf < WEAK) против сильного
-(>= STRONG). Если решить нельзя — None, документ отклоняется.
-"""
+"""Посимвольная сверка ФИО с MRZ: расхождение решается в пользу уверенно прочитанной стороны."""
 from rapidfuzz.distance import Levenshtein
 
 from .mrz import LINE_LEN, NAMES_LEN, TRANSLIT
@@ -17,7 +11,7 @@ MAX_EDITS = 2
 
 
 def _viz_chars(doc):
-    """[(поле, буква, уверенность)] в порядке поля имён MRZ; None, если разобрать нельзя."""
+    # [(поле, буква, conf)] в порядке строки 1 MRZ
     out = []
     for j, f in enumerate(NAME_FIELDS):
         out += [(None, "<", 1.0)] * (0, 2, 1)[j]
@@ -35,7 +29,6 @@ def _viz_chars(doc):
 
 
 def resolve(doc):
-    """ФИО, согласованные с MRZ (с исправлениями), или None."""
     m = doc.get("mrz")
     if not m or not m["lines"]:
         return None
@@ -43,7 +36,7 @@ def resolve(doc):
     if len(l1["text"]) != LINE_LEN or not l1["text"].startswith("PNRUS"):
         return None
     viz = _viz_chars(doc)
-    if viz is None or len(viz) >= NAMES_LEN:   # длинные ФИО в MRZ обрезаны
+    if viz is None or len(viz) >= NAMES_LEN:   # в MRZ обрезано
         return None
 
     src = "".join(TRANSLIT.get(ch, ch) for _, ch, _ in viz)
@@ -66,23 +59,21 @@ def resolve(doc):
                 out[i][1] = FROM_LATIN[lat]
             elif not (c >= STRONG and mrz_conf[k] < WEAK):
                 return None
-        elif op.tag == "delete":           # лишняя буква в viz или пропуск в MRZ
+        elif op.tag == "delete":
             f, _, c = viz[i]
             if f is None:
                 return None
-            # уверенные задвоения букв в viz встречаются, поэтому «пропуск в MRZ»
-            # не принимаем: удаляем только слабую букву viz
+            # OCR иногда уверенно задваивает букву — удаляем только слабую
             if c >= WEAK:
                 return None
             out[i][0] = None
-        else:                              # insert: в MRZ буква, которой нет в viz
+        else:
             lat = mrz_text[k]
             if mrz_conf[k] < WEAK:
-                continue                   # мусор в MRZ, viz прав
+                continue
             near = [viz[j][2] for j in (i - 1, i) if 0 <= j < len(viz) and viz[j][0]]
             if lat not in FROM_LATIN or not near or min(near) >= WEAK:
                 return None
-            # вставляем в поле соседней слева буквы (или справа в начале поля)
             owner = viz[i - 1][0] if i > 0 and viz[i - 1][0] else (viz[i][0] if i < len(viz) else None)
             if owner is None:
                 return None

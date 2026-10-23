@@ -13,10 +13,9 @@ LABELS = ROOT / "data" / "train_labels.jsonl"
 SUBDIVISIONS = ROOT / "reference" / "subdivisions.csv"
 
 VERIFIED = {"agree", "mrz", "raw", "fixed", "sex", "checked", "sum"}
-# поля, которые MRZ дублирует: принимаем только подтверждённые
 MRZ_COVERED = (*MRZ_FIELDS, *NAME_FIELDS)
-MIN_COVERAGE = 0.82   # ниже — потеряна строка (на train у верных значений не бывает)
-# поле -> (мин. уверенность неисправленных символов, макс. число слов вне словаря)
+MIN_COVERAGE = 0.82
+# (min_conf, max_oov)
 TEXT_RULES = {
     "Issue_organization_ru": (0.95, 0),
     "Birth_place_ru": (0.95, 2),
@@ -24,7 +23,6 @@ TEXT_RULES = {
 
 
 def text_ok(f, r):
-    """Свободный текст достаточно надёжен, чтобы его принять."""
     if r is None or r.coverage < MIN_COVERAGE:
         return False
     min_conf, max_oov = TEXT_RULES[f]
@@ -32,7 +30,6 @@ def text_ok(f, r):
 
 
 def decide(doc, ref):
-    """Вернуть (decision, fields) для одного документа."""
     fields, status, texts = combine(doc, ref)
     if any(status[f] not in VERIFIED for f in MRZ_COVERED):
         return "reject", None

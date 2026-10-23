@@ -1,14 +1,10 @@
-"""Справочные данные: словари свободного текста и правила согласованности полей.
-
-Строятся из разметки train и справочника подразделений; при оценке на train —
-только из фолдов, не содержащих оцениваемый документ.
-"""
+"""Словари и правила согласованности из разметки train и справочника подразделений."""
 import csv
 from dataclasses import dataclass
 
 from .text import build_vocabs
 
-# Год выдачи минус год в серии (по модулю 100): на train всегда 0..3.
+# год выдачи - год в серии
 SERIES_YEAR_LAG = range(4)
 
 
@@ -19,13 +15,12 @@ def load_subdivisions(path):
 
 @dataclass
 class Reference:
-    vocabs: dict    # поле -> text.Vocab
-    regions: dict   # первые 2 цифры серии -> первые 2 цифры кода подразделения
-    codes: set      # коды подразделений из справочника
+    vocabs: dict
+    regions: dict   # регион серии -> регион кода подразделения
+    codes: set
 
 
 def build_reference(label_fields, subdivisions):
-    """subdivisions — список строк справочника {code, name}."""
     regions = {f["Licence_number"][:2]: f["Issue_organisation_code"][:2] for f in label_fields}
     return Reference(
         vocabs=build_vocabs(label_fields, [s["name"] for s in subdivisions]),
@@ -35,7 +30,6 @@ def build_reference(label_fields, subdivisions):
 
 
 def consistent(fields, ref):
-    """Номер, код и дата выдачи согласованы между собой и со справочниками."""
     number, code, issue = (fields.get(f) for f in
                            ("Licence_number", "Issue_organisation_code", "Issue_date"))
     if not (number and code and issue):
