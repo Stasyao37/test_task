@@ -105,9 +105,27 @@ class Mrz:
     code: str | None = None             # "NNN-NNN"
     sex: str | None = None              # "МУЖ." / "ЖЕН."
     repaired: bool = False              # строка 2 восстановлена по контрольным цифрам
+    line2: str | None = None
 
     def ok(self, *names):
         return bool(self.checks) and all(self.checks.get(n) for n in names)
+
+
+def _yymmdd(d):
+    return d[8:10] + d[3:5] + d[:2]
+
+
+def confirms(m, number, birth, sex, issue, code):
+    """Значения viz, подставленные в строку 2 вместо прочитанных, дают верными ВСЕ
+    контрольные цифры (прочитанные из MRZ). Две независимые проверки на каждое поле —
+    случайное совпадение маловероятно (на train 105/105 верно)."""
+    if m is None or m.line2 is None or not all((number, birth, sex, issue, code)):
+        return False
+    l2, s = m.line2, number.replace(" ", "")
+    new = (s[:3] + s[4:] + l2[9] + "RUS" + _yymmdd(birth) + l2[19]
+           + {"МУЖ.": "M", "ЖЕН.": "F"}[sex] + l2[21:28]
+           + s[3] + _yymmdd(issue) + code.replace("-", "") + "<" + l2[42:44])
+    return all(_checks(new).values())
 
 
 def parse(doc):
@@ -133,6 +151,7 @@ def parse(doc):
     if l2[10:13] != "RUS":
         return res
 
+    res.line2 = l2
     res.checks = _checks(l2)
     s = l2[0:3] + l2[28] + l2[3:9]
     if s.isdigit():

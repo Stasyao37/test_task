@@ -7,7 +7,6 @@ MRZ эти поля не дублирует, поэтому:
   * считаются признаки надёжности: остаточная минимальная уверенность, доля
     покрытия рамки поля строками (потерянная строка), слова вне словаря и т.п.
 """
-import csv
 from collections import Counter
 from dataclasses import dataclass
 
@@ -43,11 +42,6 @@ class Vocab:
         """Словарные слова на расстоянии Левенштейна 1."""
         return [m for m, _, _ in process.extract(word, self._list, scorer=Levenshtein.distance,
                                                  score_cutoff=1, limit=20)]
-
-
-def load_subdivisions(path):
-    with open(path, encoding="utf-8") as fh:
-        return [row["name"] for row in csv.DictReader(fh)]
 
 
 def build_vocabs(label_fields, subdivision_names=()):

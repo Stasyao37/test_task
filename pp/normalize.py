@@ -19,14 +19,28 @@ def _digits(s, n):
     return d if len(d) == n else None
 
 
-def date(s):
+BIRTH_YEARS = range(1900, 2013)   # в 2026 году паспорт есть только у родившихся до 2012
+ISSUE_YEARS = range(1997, 2027)   # паспорт РФ нового образца выдаётся с 1997 года
+
+
+def date(s, years=None):
     if s is None:
         return None
     d = _digits(s, 8)
     if d is None:
         return None
     v = f"{d[:2]}.{d[2:4]}.{d[4:]}"
-    return v if parse_date(v) else None
+    if not parse_date(v) or (years is not None and int(d[4:]) not in years):
+        return None
+    return v
+
+
+def birth_date(s):
+    return date(s, BIRTH_YEARS)
+
+
+def issue_date(s):
+    return date(s, ISSUE_YEARS)
 
 
 def code(s):
